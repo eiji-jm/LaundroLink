@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "733628029063",
+    "project_id": "laundrolink--signin",
+    "storage_bucket": "laundrolink--signin.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:733628029063:android:454a7d333a9c2da5a1c022",
+        "android_client_info": {
+          "package_name": "com.eijiakaso.laundrolinkapplication"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "733628029063-jrjr2deegbok6dv9hef79s2e11ih5666.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.eijiakaso.laundrolinkapplication",
+            "certificate_hash": "5728f5b7ccb57a37c3481c6f7e6b25f0f8cc0da7"
+          }
+        },
+        {
+          "client_id": "733628029063-hr16tdof5hhtbsi6227ho82mj3kh8a0a.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyApcACvKZV885qtczF2QoW2L9vtgkTKt0E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "733628029063-1eohudafnfi3du3tlpvdvn1qi8j1b66v.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
