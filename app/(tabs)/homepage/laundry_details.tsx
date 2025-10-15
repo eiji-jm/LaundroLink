@@ -15,7 +15,7 @@ export default function LaundryDetails() {
   const router = useRouter();
   const { services } = useLocalSearchParams();
 
-  const [selectedFabric, setSelectedFabric] = useState<string | null>(null);
+  const [selectedFabrics, setSelectedFabrics] = useState<string[]>([]);
   const [addons, setAddons] = useState<string[]>([]);
   const [instructions, setInstructions] = useState("");
 
@@ -33,6 +33,12 @@ export default function LaundryDetails() {
     "Dryer sheet",
   ];
 
+  const toggleFabric = (fabric: string) => {
+    setSelectedFabrics((prev) =>
+      prev.includes(fabric) ? prev.filter((f) => f !== fabric) : [...prev, fabric]
+    );
+  };
+
   const toggleAddon = (addon: string) => {
     setAddons((prev) =>
       prev.includes(addon) ? prev.filter((a) => a !== addon) : [...prev, addon]
@@ -40,15 +46,15 @@ export default function LaundryDetails() {
   };
 
   const handleConfirm = () => {
-    if (!selectedFabric) return; // prevent accidental confirm
+    if (selectedFabrics.length === 0) return;
 
     router.push({
       pathname: "/(tabs)/homepage/df_payment",
       params: {
         services: services,
-        fabrics: JSON.stringify([selectedFabric]),
+        fabrics: JSON.stringify(selectedFabrics),
         addons: JSON.stringify(addons),
-        instructions: JSON.stringify([instructions]),
+        instructions: instructions,
       },
     });
   };
@@ -77,32 +83,26 @@ export default function LaundryDetails() {
         }}
       />
 
-      {/* Content */}
       <View style={styles.container}>
-        {/* Fabric Types */}
         <Text style={styles.sectionTitle}>Select Fabric Type(s)</Text>
         {fabricTypes.map((item, index) => (
           <Pressable
             key={index}
             style={[
               styles.optionRow,
-              selectedFabric === item && styles.selectedOption, // ✅ highlight selected
+              selectedFabrics.includes(item) && styles.selectedOption,
             ]}
-            onPress={() => setSelectedFabric(item)}
+            onPress={() => toggleFabric(item)}
           >
             <Ionicons
-              name={
-                selectedFabric === item
-                  ? "radio-button-on"
-                  : "radio-button-off-outline"
-              }
+              name={ selectedFabrics.includes(item) ? "checkbox" : "square-outline" }
               size={20}
-              color={selectedFabric === item ? "#004aad" : "#0D47A1"}
+              color={selectedFabrics.includes(item) ? "#004aad" : "#0D47A1"}
             />
             <Text
               style={[
                 styles.optionText,
-                selectedFabric === item && { fontWeight: "700", color: "#004aad" },
+                selectedFabrics.includes(item) && { fontWeight: "700", color: "#004aad" },
               ]}
             >
               {item}
@@ -110,14 +110,13 @@ export default function LaundryDetails() {
           </Pressable>
         ))}
 
-        {/* Add-ons */}
         <Text style={styles.sectionTitle}>Add-ons</Text>
         {addonOptions.map((addon, index) => (
           <Pressable
             key={index}
             style={[
               styles.optionRow,
-              addons.includes(addon) && styles.selectedOption, // ✅ highlight
+              addons.includes(addon) && styles.selectedOption,
             ]}
             onPress={() => toggleAddon(addon)}
           >
@@ -137,7 +136,6 @@ export default function LaundryDetails() {
           </Pressable>
         ))}
 
-        {/* Special Instructions */}
         <Text style={styles.sectionTitle}>Special Instructions</Text>
         <TextInput
           style={styles.input}
@@ -148,15 +146,11 @@ export default function LaundryDetails() {
         />
       </View>
 
-      {/* Footer */}
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[
-            styles.confirmBtn,
-            !selectedFabric && { backgroundColor: "#ccc" }, // ✅ disabled if no fabric
-          ]}
+          style={[ styles.confirmBtn, selectedFabrics.length === 0 && { backgroundColor: "#ccc" } ]}
           onPress={handleConfirm}
-          disabled={!selectedFabric}
+          disabled={selectedFabrics.length === 0}
         >
           <Text style={styles.confirmText}>Confirm Services</Text>
         </TouchableOpacity>
@@ -193,7 +187,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   selectedOption: {
-    backgroundColor: "#E3F2FD", // ✅ highlight
+    backgroundColor: "#E3F2FD",
   },
   optionText: {
     marginLeft: 10,

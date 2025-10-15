@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
+import * as ImagePicker from "expo-image-picker";
 import { Stack, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -19,6 +20,9 @@ import {
   View,
 } from "react-native";
 import { WebView } from 'react-native-webview';
+
+// ✅ UPDATED: Your ngrok URL is now in one place at the top
+const API_URL = "https://necole-greathearted-vernell.ngrok-free.dev";
 
 interface UserProfile {
   id: number;
@@ -86,7 +90,7 @@ export default function ProfileScreen() {
       }
       try {
         const passResponse = await axios.post(
-          `http://192.168.1.70:5000/api/users/set-password`,
+          `${API_URL}/api/users/set-password`,
           { userId: profile.id, newPassword: newPassword }
         );
         if (!passResponse.data.success) {
@@ -102,7 +106,7 @@ export default function ProfileScreen() {
 
     try {
       const response = await axios.put(
-        `http://192.168.1.70:5000/api/users/${profile.id}`,
+        `${API_URL}/api/users/${profile.id}`,
         {
             name: profile.name,
             phone: profile.phone,
@@ -139,10 +143,104 @@ export default function ProfileScreen() {
     setProfile({ ...profile, [field]: value });
   };
 
-  const pickAndUploadImage = async () => { /* This function is complete and unchanged */ };
-  const handleLinkGcash = async () => { /* This function is complete and unchanged */ };
-  const handleLinkMaya = async () => { /* This function is complete and unchanged */ };
-  const handleWebViewNavigationStateChange = (newNavState: any) => { /* This function is complete and unchanged */ };
+  const pickAndUploadImage = async () => {
+    if (!isEditing) return;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Please allow photo library access.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true,
+      aspect: [1, 1], quality: 0.8,
+    });
+    if (result.canceled || !result.assets) { return; }
+    setIsUploading(true);
+    const localUri = result.assets[0].uri;
+    const filename = localUri.split("/").pop() || "profile.jpg";
+    try {
+      const response = await fetch(localUri);
+      const blob = await response.blob();
+      const formData = new FormData();
+      formData.append('file', blob, filename);
+      const uploadResponse = await axios.post(`${API_URL}/api/upload`, formData);
+      if (uploadResponse.data.success) {
+        const permanentUrl = uploadResponse.data.url;
+        setProfile({ ...profile!, picture: permanentUrl });
+        Alert.alert("Success", "Profile picture updated. Don't forget to save changes!");
+      } else {
+        throw new Error(uploadResponse.data.message);
+      }
+    } catch (error) {
+      console.error("❌ Image upload failed:", error);
+      Alert.alert("Error", "Failed to upload image. Please try again.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+  
+  const handleLinkGcash = async () => {
+    if (!profile) return;
+    try {
+      const response = await axios.post(`${API_URL}/api/link-gcash`, {
+        userId: profile.id,
+        platform: Platform.OS,
+      });
+      if (response.data.success) {
+        const url = response.data.url;
+        if (Platform.OS === 'web') {
+          window.location.href = url;
+        } else {
+          setCurrentProvider('GCash');
+          setWebViewUrl(url);
+          setShowWebView(true);
+        }
+      } else {
+        Alert.alert('Error', response.data.message || 'Could not start GCash linking process.');
+      }
+    } catch (error) {
+      console.error("❌ Failed to initiate GCash linking:", error);
+      Alert.alert('Error', 'An error occurred. Please try again.');
+    }
+  };
+
+  const handleLinkMaya = async () => {
+    if (!profile) return;
+    try {
+      const response = await axios.post(`${API_URL}/api/link-maya`, {
+        userId: profile.id,
+        platform: Platform.OS,
+      });
+      if (response.data.success) {
+        const url = response.data.url;
+        if (Platform.OS === 'web') {
+          window.location.href = url;
+        } else {
+          setCurrentProvider('Maya');
+          setWebViewUrl(url);
+          setShowWebView(true);
+        }
+      } else {
+        Alert.alert('Error', response.data.message || 'Could not start Maya linking process.');
+      }
+    } catch (error) {
+      console.error("❌ Failed to initiate Maya linking:", error);
+      Alert.alert('Error', 'An error occurred. Please try again.');
+    }
+  };
+  
+  const handleWebViewNavigationStateChange = (newNavState: any) => {
+    const { url } = newNavState;
+    if (!url) return;
+    if (url.includes('yourapp://profile/payment-success') || url.includes('yourapp://maya-success')) {
+      setShowWebView(false);
+      Alert.alert('Success!', `Your ${currentProvider} account has been linked.`);
+      fetchUser();
+    }
+    if (url.includes('maya-fail') || url.includes('maya-cancel')) {
+      setShowWebView(false);
+    }
+  };
 
   if (loading || !profile) {
     return (

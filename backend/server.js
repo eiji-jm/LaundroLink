@@ -80,6 +80,53 @@ async function sendEmail(to, subject, html) {
 // API Routes
 // =================================================================
 
+// ✅ ADDED BACK: The missing route for image uploads
+app.post("/api/upload", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) { 
+      return res.status(400).json({ success: false, message: "No file uploaded." }); 
+    }
+    const b64 = Buffer.from(req.file.buffer).toString("base64");
+    let dataURI = "data:" + req.file.mimetype + ";base64," + b64;
+    const result = await cloudinary.uploader.upload(dataURI, { 
+      folder: "laundrolink_profiles" 
+    });
+    res.json({ 
+      success: true, 
+      message: "Image uploaded successfully.", 
+      url: result.secure_url 
+    });
+  } catch (error) {
+    console.error("❌ Image upload error:", error);
+    res.status(500).json({ success: false, message: "Failed to upload image." });
+  }
+});
+
+// ✅ RESTORED: The missing profile update route
+app.put("/api/users/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, phone, address, picture } = req.body;
+    if (!id) { return res.status(400).json({ success: false, message: "User ID is required." }); }
+    const fieldsToUpdate = [];
+    const values = [];
+    if (name !== undefined) { fieldsToUpdate.push("name = ?"); values.push(name); }
+    if (phone !== undefined) { fieldsToUpdate.push("phone = ?"); values.push(phone); }
+    if (address !== undefined) { fieldsToUpdate.push("address = ?"); values.push(address); }
+    if (picture !== undefined) { fieldsToUpdate.push("picture = ?"); values.push(picture); }
+    if (fieldsToUpdate.length === 0) { return res.status(400).json({ success: false, message: "No fields to update." }); }
+    values.push(id);
+    const sql = `UPDATE users SET ${fieldsToUpdate.join(", ")} WHERE id = ?`;
+    const [result] = await db.query(sql, values);
+    if (result.affectedRows === 0) { return res.status(404).json({ success: false, message: "User not found." }); }
+    const [updatedUserRows] = await db.query("SELECT * FROM users WHERE id = ?", [id]);
+    res.json({ success: true, message: "Profile updated successfully.", user: updatedUserRows[0] });
+  } catch (error) {
+    console.error("❌ Profile update error:", error);
+    res.status(500).json({ success: false, message: "Failed to update profile." });
+  }
+});
+
 app.post("/auth/login", async (req, res) => {
   try {
     const { identifier, password } = req.body;
@@ -207,6 +254,51 @@ app.post("/auth/reset-password", async (req, res) => {
   } catch (error) {
     console.error("Reset password error:", error);
     res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+// =================================================================
+// CUSTOMER SELECTS LAUNDRY SERVICES
+// =================================================================
+
+// ✅ NEW: Endpoint to create and save a new order
+app.post("/api/orders", async (req, res) => {
+  try {
+    const {
+      orderId,
+      userId,
+      shopId,
+      shopName,
+      services,
+      fabrics,
+      addons,
+      instructions,
+      deliveryOption
+    } = req.body;
+
+    if (!userId || !shopId || !orderId) {
+      return res.status(400).json({ success: false, message: "Missing required order information." });
+    }
+
+    // Convert arrays to JSON strings for database storage
+    const servicesJson = JSON.stringify(services);
+    const fabricsJson = JSON.stringify(fabrics);
+    const addonsJson = JSON.stringify(addons);
+
+    const [result] = await db.query(
+      "INSERT INTO orders (order_uid, user_id, shop_id, shop_name, services, fabrics, addons, instructions, delivery_option) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [orderId, userId, shopId, shopName, servicesJson, fabricsJson, addonsJson, instructions, deliveryOption]
+    );
+
+    if (result.insertId) {
+      res.status(201).json({ success: true, message: "Order created successfully.", orderId: result.insertId });
+    } else {
+      throw new Error("Failed to save order to the database.");
+    }
+
+  } catch (error) {
+    console.error("❌ Create order error:", error);
+    res.status(500).json({ success: false, message: "Failed to create order." });
   }
 });
 
