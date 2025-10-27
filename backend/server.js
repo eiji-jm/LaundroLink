@@ -18,7 +18,7 @@ app.use(express.json());
 // =================================================================
 // Service Configurations
 // =================================================================
-sgMail.setApiKey(process.env.SENDGRID_API_KEY || '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');
+sgMail.setApiKey(process.env.SENDGRID_API_KEY || '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');
 
 const paymongo = new Paymongo(process.env.PAYMONGO_SECRET_KEY || 'sk_test_XKokBfcf6whTCziC2MsoiR2p'); 
 
@@ -299,6 +299,35 @@ app.post("/api/orders", async (req, res) => {
   } catch (error) {
     console.error("❌ Create order error:", error);
     res.status(500).json({ success: false, message: "Failed to create order." });
+  }
+});
+
+app.get("/api/test", (req, res) => {
+  res.status(200).send("Server connection is working!");
+});
+
+app.get("/api/shops/nearby", async (req, res) => {
+  try {
+    const { lat, lon } = req.query;
+    if (!lat || !lon) {
+      return res.status(400).json({ success: false, message: "Latitude and longitude are required." });
+    }
+    const latitude = parseFloat(lat);
+    const longitude = parseFloat(lon);
+
+    const query = `
+      SELECT id, name, image_url, address, description, addDescription, contact, hours, availability, rating,
+             ( 6371 * acos( cos( radians(?) ) * cos( radians( latitude ) ) * cos( radians( longitude ) - radians(?) ) + sin( radians(?) ) * sin( radians( latitude ) ) ) ) AS distance
+      FROM shops
+      HAVING distance < 10
+      ORDER BY distance
+      LIMIT 20;
+    `;
+    const [shops] = await db.query(query, [latitude, longitude, latitude]);
+    res.json({ success: true, shops });
+  } catch (error) {
+    console.error("❌ Get nearby shops error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch nearby shops." });
   }
 });
 

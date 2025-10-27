@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import * as ImagePicker from "expo-image-picker";
+import * as Location from 'expo-location';
 import { Stack, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -21,8 +22,11 @@ import {
 } from "react-native";
 import { WebView } from 'react-native-webview';
 
-// ✅ UPDATED: Your ngrok URL is now in one place at the top
+// =================================================================
+// Configurations
+// =================================================================
 const API_URL = "https://necole-greathearted-vernell.ngrok-free.dev";
+// No API Key is needed for Nominatim
 
 interface UserProfile {
   id: number;
@@ -46,6 +50,7 @@ export default function ProfileScreen() {
   const [showWebView, setShowWebView] = useState(false);
   const [webViewUrl, setWebViewUrl] = useState('');
   const [currentProvider, setCurrentProvider] = useState('');
+  const [isFetchingLocation, setIsFetchingLocation] = useState(false);
 
   const fetchUser = async () => {
     try {
@@ -78,42 +83,20 @@ export default function ProfileScreen() {
 
   const handleSaveChanges = async () => {
     if (!profile) return;
-
     if (newPassword || confirmPassword) {
-      if (newPassword !== confirmPassword) {
-        Alert.alert("Error", "Passwords do not match.");
-        return;
-      }
-      if (newPassword.length < 6) {
-        Alert.alert("Error", "Password must be at least 6 characters long.");
-        return;
-      }
+      if (newPassword !== confirmPassword) { Alert.alert("Error", "Passwords do not match."); return; }
+      if (newPassword.length < 6) { Alert.alert("Error", "Password must be at least 6 characters long."); return; }
       try {
-        const passResponse = await axios.post(
-          `${API_URL}/api/users/set-password`,
-          { userId: profile.id, newPassword: newPassword }
-        );
-        if (!passResponse.data.success) {
-          Alert.alert("Password Error", "Could not update password.");
-          return;
-        }
+        const passResponse = await axios.post(`${API_URL}/api/users/set-password`, { userId: profile.id, newPassword: newPassword });
+        if (!passResponse.data.success) { Alert.alert("Password Error", "Could not update password."); return; }
       } catch (err) {
         console.error("❌ Password update error:", err);
         Alert.alert("Error", "Failed to connect to the server for password update.");
         return;
       }
     }
-
     try {
-      const response = await axios.put(
-        `${API_URL}/api/users/${profile.id}`,
-        {
-            name: profile.name,
-            phone: profile.phone,
-            address: profile.address,
-            picture: profile.picture
-        }
-      );
+      const response = await axios.put(`${API_URL}/api/users/${profile.id}`, { name: profile.name, phone: profile.phone, address: profile.address, picture: profile.picture });
       if (response.data.success) {
         await AsyncStorage.setItem("user", JSON.stringify(response.data.user));
         setProfile(response.data.user);
@@ -138,9 +121,40 @@ export default function ProfileScreen() {
     }
   };
 
-  const updateField = (field: keyof UserProfile, value: string) => {
+  const updateField = (field: keyof UserProfile, value: string | null) => {
     if (!profile) return;
     setProfile({ ...profile, [field]: value });
+  };
+  
+  // ✅ UPDATED: This function now uses the Nominatim (OpenStreetMap) API
+  const handlePinpointAddress = async () => {
+    setIsFetchingLocation(true);
+    try {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission denied', 'Please allow location access to use this feature.');
+        return;
+      }
+      let location = await Location.getCurrentPositionAsync({});
+      const { latitude, longitude } = location.coords;
+      
+      // Using the Nominatim API - no key required
+      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`;
+      
+      const response = await axios.get(url);
+
+      if (response.data && response.data.display_name) {
+        updateField('address', response.data.display_name);
+        Alert.alert("Location Found!", "Address has been updated.");
+      } else {
+        Alert.alert("Error", "Could not find an address for this location.");
+      }
+    } catch (error) {
+      console.error("Error getting location:", error);
+      Alert.alert("Error", "Could not fetch your location.");
+    } finally {
+      setIsFetchingLocation(false);
+    }
   };
 
   const pickAndUploadImage = async () => {
@@ -178,7 +192,7 @@ export default function ProfileScreen() {
       setIsUploading(false);
     }
   };
-  
+
   const handleLinkGcash = async () => {
     if (!profile) return;
     try {
@@ -228,7 +242,7 @@ export default function ProfileScreen() {
       Alert.alert('Error', 'An error occurred. Please try again.');
     }
   };
-  
+
   const handleWebViewNavigationStateChange = (newNavState: any) => {
     const { url } = newNavState;
     if (!url) return;
@@ -243,11 +257,7 @@ export default function ProfileScreen() {
   };
 
   if (loading || !profile) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
+    return ( <View style={styles.loadingContainer}><ActivityIndicator size="large" /></View> );
   }
 
   return (
@@ -269,50 +279,39 @@ export default function ProfileScreen() {
           headerStyle: { backgroundColor: "#6EC1E4" },
           headerShadowVisible: false,
           headerTintColor: "#fff",
-          headerLeft: () => (
-            <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.push('/homepage')}>
-              <Ionicons name="arrow-back" size={24} color="#fff" style={{ marginLeft: 10 }} />
-            </TouchableOpacity>
-          ),
-          headerTitle: () => (
-            <Text style={{ color: "#fff", fontSize: 20, fontWeight: "700", marginLeft: 20 }}>
-              Profile
-            </Text>
-          ),
-          headerRight: () => (
-            <TouchableOpacity onPress={handleLogout} style={{ marginRight: 15 }}>
-              <Ionicons name="log-out-outline" size={28} color="red" />
-            </TouchableOpacity>
-          ),
+          headerLeft: () => ( <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.push('/homepage')}><Ionicons name="arrow-back" size={24} color="#fff" style={{ marginLeft: 10 }} /></TouchableOpacity> ),
+          headerTitle: () => ( <Text style={{ color: "#fff", fontSize: 20, fontWeight: "700", marginLeft: 20 }}>Profile</Text> ),
+          headerRight: () => ( <TouchableOpacity onPress={handleLogout} style={{ marginRight: 15 }}><Ionicons name="log-out-outline" size={28} color="red" /></TouchableOpacity> ),
         }}
       />
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.container}>
           <View style={styles.header}>
             <TouchableOpacity style={styles.avatarWrap} onPress={pickAndUploadImage} disabled={!isEditing || isUploading}>
-              {profile.picture ? (
-                <Image source={{ uri: profile.picture }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarInitial}>
-                    {profile.name.split(" ").map((n) => n[0]).join("").toUpperCase()}
-                  </Text>
-                </View>
+              {profile.picture ? ( <Image source={{ uri: profile.picture }} style={styles.avatar} /> ) : (
+                <View style={styles.avatarPlaceholder}><Text style={styles.avatarInitial}>{profile.name.split(" ").map((n) => n[0]).join("").toUpperCase()}</Text></View>
               )}
               {isUploading ? ( <View style={styles.uploadingOverlay}><ActivityIndicator color="#fff" /></View> )
                : isEditing && ( <View style={styles.cameraOverlay}><Ionicons name="camera" size={22} color="#fff" /></View> )}
             </TouchableOpacity>
-            {isEditing ? (
-                 <TextInput style={[styles.input, styles.nameInput]} value={profile.name} onChangeText={(t) => updateField("name", t)} />
-            ) : ( <Text style={styles.name}>{profile.name}</Text> )}
+            {isEditing ? ( <TextInput style={[styles.input, styles.nameInput]} value={profile.name} onChangeText={(t) => updateField("name", t)} /> )
+             : ( <Text style={styles.name}>{profile.name}</Text> )}
           </View>
 
           <View style={styles.form}>
             <TextInput style={[styles.input, !isEditing && styles.readonly]} value={profile.phone || ''} onChangeText={(t) => updateField("phone", t)} editable={isEditing} keyboardType="phone-pad" placeholder="Phone number" placeholderTextColor="#aaa" />
             <TextInput style={[styles.input, styles.readonly]} value={profile.email} editable={false} />
-            <Text style={styles.sectionTitle}>Saved Address</Text>
+            
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Saved Address</Text>
+              {isEditing && (
+                <TouchableOpacity onPress={handlePinpointAddress} style={styles.pinpointButton} disabled={isFetchingLocation}>
+                  {isFetchingLocation ? ( <ActivityIndicator color="#004aad" size="small" /> ) : ( <Ionicons name="navigate-circle-outline" size={24} color="#004aad" /> )}
+                </TouchableOpacity>
+              )}
+            </View>
             <View style={styles.addrRow}>
-              <TextInput style={[styles.input, styles.addressInput, !isEditing && styles.readonly]} value={profile.address || ''} onChangeText={(t) => updateField("address", t)} editable={isEditing} multiline placeholder="Enter address" placeholderTextColor="#aaa" />
+              <TextInput style={[styles.input, styles.addressInput, !isEditing && styles.readonly]} value={profile.address || ''} onChangeText={(t) => updateField("address", t)} editable={isEditing} multiline placeholder="Enter address or use pinpoint" placeholderTextColor="#aaa" />
             </View>
             
             {isEditing && (
@@ -324,16 +323,10 @@ export default function ProfileScreen() {
             )}
 
             <Text style={styles.sectionTitle}>Payment Methods</Text>
-            {profile.gcash_payment_method_id ? (
-              <View style={styles.linkedMethod}><Text style={styles.linkedMethodText}>GCash Account Linked</Text><Ionicons name="checkmark-circle" size={24} color="green" /></View>
-            ) : (
-              <TouchableOpacity style={styles.linkButton} onPress={handleLinkGcash}><Text style={styles.linkButtonText}>Link GCash Account</Text></TouchableOpacity>
-            )}
-            {profile.maya_payment_token_id ? (
-              <View style={styles.linkedMethod}><Text style={styles.linkedMethodText}>Maya Account Linked</Text><Ionicons name="checkmark-circle" size={24} color="green" /></View>
-            ) : (
-              <TouchableOpacity style={[styles.linkButton, {backgroundColor: '#000'}]} onPress={handleLinkMaya}><Text style={styles.linkButtonText}>Link Maya Account</Text></TouchableOpacity>
-            )}
+            {profile.gcash_payment_method_id ? ( <View style={styles.linkedMethod}><Text style={styles.linkedMethodText}>GCash Account Linked</Text><Ionicons name="checkmark-circle" size={24} color="green" /></View>
+            ) : ( <TouchableOpacity style={styles.linkButton} onPress={handleLinkGcash}><Text style={styles.linkButtonText}>Link GCash Account</Text></TouchableOpacity> )}
+            {profile.maya_payment_token_id ? ( <View style={styles.linkedMethod}><Text style={styles.linkedMethodText}>Maya Account Linked</Text><Ionicons name="checkmark-circle" size={24} color="green" /></View>
+            ) : ( <TouchableOpacity style={[styles.linkButton, {backgroundColor: '#000'}]} onPress={handleLinkMaya}><Text style={styles.linkButtonText}>Link Maya Account</Text></TouchableOpacity> )}
           </View>
         </ScrollView>
         <View style={styles.editRow}>
@@ -363,9 +356,11 @@ const styles = StyleSheet.create({
   form: { marginTop: 20, backgroundColor: "#fff", borderRadius: 12, padding: 16, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   input: { backgroundColor: "#F8FAFB", borderRadius: 10, paddingVertical: 12, paddingHorizontal: 14, fontSize: 16, marginBottom: 12, borderWidth: 1, borderColor: "#DCE3E7", color: "#333" },
   readonly: { color: "#555", backgroundColor: "#f0f2f5" },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   sectionTitle: { fontSize: 18, fontWeight: "700", color: "#0B3954", marginVertical: 10 },
+  pinpointButton: { padding: 5 },
   addrRow: { marginBottom: 10 },
-  addressInput: { minHeight: 50, textAlignVertical: "top" },
+  addressInput: { minHeight: 80, textAlignVertical: "top" },
   editRow: { position: "absolute", left: 0, right: 0, bottom: 20, paddingHorizontal: 20 },
   editButton: { backgroundColor: "#1565C0", paddingVertical: 15, borderRadius: 10, alignItems: "center", shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 6, elevation: 4 },
   saveButton: { backgroundColor: "#0D47A1" },
